@@ -1,9 +1,7 @@
 using Azure.Identity;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.Azure.Cosmos;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using TestWebK8s;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,20 +18,23 @@ builder.Services.AddDbContext<DbContextTest>(options =>
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddHealthChecksUI().AddInMemoryStorage();
-var kvUri = "https://KV-AEU-ECP-DEV-TRUE.vault.azure.net";
+var storageAccount = builder.Configuration["storageaccount"];
+var servicebus= builder.Configuration["servicebus"];
+var keyvaultName = builder.Configuration["keyvault"];
+var secret = builder.Configuration["secret"];
 
 builder.Services.AddHealthChecks()
     .AddSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),name:"SqlServer")
     .AddCheck<MyHealthCheck>("MyHealthCheckRandom")
     .AddDbContextCheck<DbContextTest>()
-    .AddAzureServiceBusQueue("SB-AEU-ECP-DEV-TRUE.servicebus.windows.net",  "deadletter", new DefaultAzureCredential(), "Service Bus - Queue")
-    .AddAzureBlobStorage(new Uri("https://saaeuecpdevtrue.blob.core.windows.net"), new DefaultAzureCredential())
-    .AddAzureQueueStorage(new Uri("https://saaeuecpdevtrue.queue.core.windows.net"), new DefaultAzureCredential())
-    .AddAzureKeyVault(new Uri(kvUri), 
+    .AddAzureServiceBusQueue($"{servicebus}.servicebus.windows.net",  "deadletter", new DefaultAzureCredential(), "Service Bus - Queue")
+    .AddAzureBlobStorage(new Uri($"https://{storageAccount}.blob.core.windows.net"), new DefaultAzureCredential())
+    .AddAzureQueueStorage(new Uri($"https://{storageAccount}.queue.core.windows.net"), new DefaultAzureCredential())
+    .AddAzureKeyVault(new Uri($"https://{keyvaultName}.vault.azure.net"), 
         new DefaultAzureCredential(),
         options => 
         { 
-            options.AddSecret("MsiSqlConnectionString"); 
+            options.AddSecret(secret); 
         }, 
         name:"Key Vault")
     .AddApplicationInsightsPublisher();
