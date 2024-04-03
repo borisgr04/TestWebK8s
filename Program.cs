@@ -2,11 +2,19 @@ using Azure.Identity;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.Channels;
 using TestWebK8s;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+
+var storageAccount = builder.Configuration["storageaccount"];
+var servicebus = builder.Configuration["servicebus"];
+var keyvaultName = builder.Configuration["keyvault"];
+var secret = builder.Configuration["secret"];
+var connectionStringSql = builder.Configuration.GetConnectionString("DefaultConnection");
+
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -14,19 +22,16 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<DbContextTest>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(connectionStringSql));
 
 builder.Services.AddHealthChecksUI().AddInMemoryStorage();
-var storageAccount = builder.Configuration["storageaccount"];
-var servicebus= builder.Configuration["servicebus"];
-var keyvaultName = builder.Configuration["keyvault"];
-var secret = builder.Configuration["secret"];
+
 
 builder.Services.AddHealthChecks()
-    .AddSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),name:"SqlServer")
+    .AddSqlServer(connectionStringSql, name:"SqlServer", healthQuery: "SELECT count(*) from [Admin].[Category]")
     .AddCheck<MyHealthCheck>("MyHealthCheckRandom")
-    .AddDbContextCheck<DbContextTest>()
+    .AddDbContextCheck<DbContextTest>(customTestQuery:
+            (db, cancel) => Task.FromResult(db.Category.Any()))
     .AddAzureServiceBusQueue($"{servicebus}.servicebus.windows.net",  "deadletter", new DefaultAzureCredential(), "Service Bus - Queue")
     .AddAzureBlobStorage(new Uri($"https://{storageAccount}.blob.core.windows.net"), new DefaultAzureCredential())
     .AddAzureQueueStorage(new Uri($"https://{storageAccount}.queue.core.windows.net"), new DefaultAzureCredential())
